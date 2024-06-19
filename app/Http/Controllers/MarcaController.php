@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Marca;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class MarcaController extends Controller
 {
@@ -20,7 +21,10 @@ class MarcaController extends Controller
     public function index()
     {
         $marcas = $this->marca->all();
-        return $marcas;
+        if ($marcas == null) {
+            return response()->json(['erro' => 'Não há registros com esse id'], 404);
+        }
+        return response()->json($marcas, 200);
     }
 
     /**
@@ -29,8 +33,16 @@ class MarcaController extends Controller
     public function store(Request $request)
     {
         //$marca = create($request->all());
-        $marca = $this->marca->create($request->all());
-        return $marca;
+        $request->validate($this->marca->rules(), $this->marca->feedback());
+        $imagem = $request->file('imagem');
+        $imagem_urn = $imagem->store('imagens', 'public');
+
+        
+        $marca = $this->marca->create([
+            'nome' => $request->nome,
+            'imagem' => $imagem_urn
+        ]);
+        return response()->json($marca, 200);
     }
 
     /**
@@ -40,9 +52,9 @@ class MarcaController extends Controller
     {
         $marca = $this->marca->find($id);  
         if ($marca == null) {
-            return ['erro' => 'Não há nenhum registro com esse id'];
+            return response()->json(['erro' => 'Não há nenhum registro com esse id'], 404);
         }
-        return $marca;
+        return response()->json($marca, 200);
     }
 
     /**
@@ -53,12 +65,41 @@ class MarcaController extends Controller
         //$marca->update($request->all());
         $marca = $this->marca->find($id);
 
-        if($marca == null) {
-            return ['erro' => 'Não há nenhum registro com esse id'];
+        if($marca === null) {
+            return response()->json(['erro' => 'Impossível realizar a atualização. O recurso solicitado não existe'], 404);
         }
 
-        $marca->update($request->all());
-        return $marca;
+        if($request->method() === 'PATCH') {
+
+            $regrasDinamicas = array();
+
+            //percorrendo todas as regras definidas no Model
+            foreach($marca->rules() as $input => $regra) {
+                
+                //coletar apenas as regras aplicáveis aos parâmetros parciais da requisição PATCH
+                if(array_key_exists($input, $request->all())) {
+                    $regrasDinamicas[$input] = $regra;
+                }
+            }
+            
+            $request->validate($regrasDinamicas, $marca->feedback());
+
+        } else {
+            $request->validate($marca->rules(), $marca->feedback());
+        }
+        
+        if($request->file('imagem')) {
+            Storage::disk('public')->delete($marca->imagem);
+        }
+
+        $imagem = $request->file('imagem');
+        $imagem_urn = $imagem->store('imagens', 'public');
+
+        $marca->update([
+            'nome' => $request->nome,
+            'imagem' => $imagem_urn
+        ]);
+        return response()->json($marca, 200);
     }
 
     /**
@@ -69,10 +110,13 @@ class MarcaController extends Controller
         $marca = $this->marca->find($id);
 
         if ($marca == null) {
-            return ['erro' => 'Não há nenhum registro com esse id'];
+            return response()->json(['erro' => 'Não há nenhum registro com esse id'], 404);
         }
+        
+        Storage::disk('public')->delete($marca->imagem);
+
 
         $marca->delete();
-        return ['msg' => 'Marca removida com sucesso'];
+        return response()->json(['msg' => 'Marca removida com sucesso'], 200);
     }
 }
