@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Marca;
+use App\Repositories\MarcaRepository;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -18,13 +19,26 @@ class MarcaController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $marcas = $this->marca->all();
-        if ($marcas == null) {
-            return response()->json(['erro' => 'Não há registros com esse id'], 404);
+        $marcaRepository = new MarcaRepository($this->marca);
+        
+        if ($request->has('atributos_modelos')) {
+            $atributos_modelos = 'modelos:id,'.$request->atributos_modelos;
+            $marcaRepository->selectAtributosRegistrosRelacionados($atributos_modelos);
+        } else {
+            $marcaRepository->selectAtributosRegistrosRelacionados('modelos');
         }
-        return response()->json($marcas, 200);
+
+        if ($request->has('filtro')) {
+            $marcaRepository->filtro($request->filtro);
+        }
+
+        if ($request->has('atributos')) {
+            $marcaRepository->selectAtributos($request->atributos);
+        }
+
+        return response()->json($marcaRepository->getResultado(), 200);
     }
 
     /**
@@ -50,7 +64,7 @@ class MarcaController extends Controller
      */
     public function show($id)
     {
-        $marca = $this->marca->find($id);  
+        $marca = $this->marca->with('modelos')->find($id);  
         if ($marca == null) {
             return response()->json(['erro' => 'Não há nenhum registro com esse id'], 404);
         }
@@ -94,11 +108,16 @@ class MarcaController extends Controller
 
         $imagem = $request->file('imagem');
         $imagem_urn = $imagem->store('imagens', 'public');
-
+        
+        $marca->fill($request->all());
+        $marca->imagem = $imagem_urn;
+        $marca->save();
+        /*
         $marca->update([
             'nome' => $request->nome,
             'imagem' => $imagem_urn
         ]);
+        */
         return response()->json($marca, 200);
     }
 
